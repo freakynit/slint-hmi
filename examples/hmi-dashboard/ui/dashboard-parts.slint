@@ -1,0 +1,79 @@
+import { HmiTheme } from "@slint-hmi/hmi.slint";
+
+export component MetricCard inherits Rectangle {
+    in property <string> label;
+    in property <string> reading;
+    in property <string> detail;
+    in property <color> tint: HmiTheme.palette.accent;
+    background: HmiTheme.palette.surface;
+    border-radius: 12px; border-width: 1px; border-color: HmiTheme.palette.border;
+    Rectangle { x: 0px; y: 18px; width: 3px; height: parent.height - 36px; background: root.tint; border-radius: 2px; }
+    VerticalLayout {
+        padding: 16px; spacing: 5px;
+        Text { text: root.label; color: HmiTheme.palette.muted; font-size: 11px; overflow: elide; }
+        Text { text: root.reading; color: root.tint; font-size: 25px; font-weight: 700; overflow: elide; }
+        Text { text: root.detail; color: HmiTheme.palette.muted; font-size: 10px; overflow: elide; }
+    }
+}
+
+export component SectionHeading inherits HorizontalLayout {
+    in property <string> title;
+    in property <string> detail;
+    height: 24px;
+    Text { text: root.title; color: HmiTheme.palette.text; font-size: 15px; font-weight: 700; }
+    Text { text: root.detail; color: HmiTheme.palette.muted; font-size: 11px; horizontal-alignment: right; }
+}
+
+component EquipmentTile inherits Rectangle {
+    in property <string> tag;
+    in property <string> title;
+    in property <string> reading;
+    in property <string> state;
+    in property <bool> healthy: true;
+    min-width: 94px;
+    background: HmiTheme.palette.surface;
+    border-radius: 10px; border-width: 1px;
+    border-color: root.healthy ? HmiTheme.palette.border : HmiTheme.palette.critical;
+    VerticalLayout {
+        padding: 12px; spacing: 6px; alignment: center;
+        Text { text: root.tag; color: HmiTheme.palette.muted; font-size: 10px; horizontal-alignment: center; }
+        Text { text: root.title; color: HmiTheme.palette.text; font-size: 13px; font-weight: 700; horizontal-alignment: center; }
+        Text { text: root.reading; color: HmiTheme.palette.accent; font-size: 19px; font-weight: 700; horizontal-alignment: center; overflow: elide; }
+        Text { text: root.state; color: root.healthy ? HmiTheme.palette.success : HmiTheme.palette.critical; font-size: 10px; horizontal-alignment: center; overflow: elide; }
+    }
+}
+
+export component ProcessLoop inherits Rectangle {
+    in property <string> temperature;
+    in property <string> flow;
+    in property <string> level;
+    in property <bool> connected: true;
+    in property <bool> fault: false;
+    in property <bool> paused: false;
+    min-width: 360px;
+    background: HmiTheme.palette.surface;
+    border-width: 1px; border-color: HmiTheme.palette.border; border-radius: 14px;
+    VerticalLayout {
+        padding: 18px; spacing: 12px;
+        Text { height: 22px; text: "CIRCUIT A / CLOSED LOOP"; font-size: 11px; font-weight: 700; color: HmiTheme.palette.accent; }
+        Text { height: 22px; text: root.fault ? "Interlock tripped · circulation stopped" : !root.connected ? "Waiting for controller" : root.paused ? "Telemetry paused" : "Circulating · all systems nominal"; font-size: 12px; color: root.fault ? HmiTheme.palette.critical : HmiTheme.palette.muted; overflow: elide; }
+        Rectangle {
+            background: HmiTheme.palette.elevated; border-radius: 10px;
+            Path {
+                width: parent.width; height: parent.height;
+                viewbox-width: 100; viewbox-height: 100; fit: fill;
+                commands: "M 17 50 L 83 50 L 83 16 L 17 16 L 17 50";
+                stroke: root.fault || !root.connected ? HmiTheme.palette.track : HmiTheme.palette.accent;
+                stroke-width: 3px; stroke-line-join: round;
+            }
+            Text { x: 0px; y: 4px; height: 18px; text: "←  COOLANT RETURN"; color: HmiTheme.palette.muted; font-size: 9px; horizontal-alignment: center; }
+            HorizontalLayout {
+                padding: 12px; padding-top: 40px; padding-bottom: 12px; spacing: 12px;
+                EquipmentTile { tag: "TK-01"; title: "Reservoir"; reading: root.connected ? root.level + " %" : "—"; state: root.connected ? "Level healthy" : "No signal"; healthy: root.connected; }
+                EquipmentTile { tag: "P-01"; title: "Pump"; reading: root.connected ? root.flow + " L/m" : "—"; state: root.fault ? "TRIPPED" : root.paused ? "Hold" : root.connected ? "Running" : "Offline"; healthy: root.connected && !root.fault; }
+                EquipmentTile { tag: "HX-01"; title: "Exchanger"; reading: root.connected ? root.temperature + " °C" : "—"; state: root.connected ? "Heat transfer" : "No signal"; healthy: root.connected; }
+            }
+        }
+        Text { height: 16px; text: "Reservoir → pump → heat exchanger → return"; font-size: 10px; color: HmiTheme.palette.muted; horizontal-alignment: center; overflow: elide; }
+    }
+}

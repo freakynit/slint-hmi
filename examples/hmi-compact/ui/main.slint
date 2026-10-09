@@ -1,0 +1,72 @@
+import { HmiTheme, HmiPalette, RadialGauge, RotaryControl, StatusLamp, EquipmentState, AlarmPanel, Alarm, AlarmFilter, LiveTrend, TrendSeries } from "@slint-hmi/hmi.slint";
+import { HmiAction } from "@slint-hmi/hmi.slint";
+export { HmiTheme }
+
+export component CompactHmi inherits Window {
+    title: "slint-hmi · Compact HMI";
+    preferred-width: 900px; preferred-height: 790px;
+    min-width: 860px; min-height: 770px;
+    background: HmiTheme.palette.canvas;
+    in-out property <float> setpoint: 42;
+    in property <[TrendSeries]> trends;
+    in property <[Alarm]> alarms;
+    in-out property <AlarmFilter> alarm-filter: AlarmFilter.all;
+    in property <string> message: "Touch targets ≥44 px · Host validates setpoints";
+    callback setpoint-requested(float);
+    callback filter-requested(AlarmFilter);
+    callback acknowledge-requested(string);
+    // Local override: other components continue to follow the global theme.
+    private property <HmiPalette> warm-palette: {
+        canvas: HmiTheme.palette.canvas, surface: HmiTheme.palette.surface,
+        elevated: HmiTheme.palette.elevated, border: HmiTheme.palette.border,
+        text: HmiTheme.palette.text, muted: HmiTheme.palette.muted,
+        accent: HmiTheme.dark ? #ffc56b : #956000,
+        success: HmiTheme.palette.success, warning: HmiTheme.palette.warning,
+        critical: HmiTheme.palette.critical, track: HmiTheme.palette.track,
+    };
+
+    VerticalLayout {
+        padding: 20px; spacing: 12px;
+        HorizontalLayout {
+            height: 44px;
+            Text { text: "Mixing vessel / touch panel"; font-size: 24px; font-weight: 700; color: HmiTheme.palette.text; vertical-alignment: center; }
+            HmiAction { text: HmiTheme.dark ? "Light" : "Dark"; width: 70px; clicked => { HmiTheme.dark = !HmiTheme.dark; } }
+        }
+        HorizontalLayout {
+            height: 68px; spacing: 10px;
+            StatusLamp { label: "Agitator"; state: EquipmentState.running; }
+            StatusLamp { label: "Feed valve"; state: EquipmentState.idle; state-text: "Closed"; }
+            StatusLamp { label: "Inspection"; state: EquipmentState.warning; blink: true; reduced-motion: true; }
+            StatusLamp { label: "Remote sensor"; state: EquipmentState.offline; }
+        }
+        HorizontalLayout {
+            height: 280px; spacing: 12px;
+            RadialGauge { label: "Vessel temperature"; unit: "°C"; value: 41.8; maximum: 80; warning-value: 60; critical-value: 72; palette: root.warm-palette; }
+            RadialGauge { label: "Fill level"; unit: "%"; value: 72; decimals: 0; show-bands: false; }
+            RadialGauge { label: "Remote pressure"; unit: "bar"; maximum: 10; available: false; }
+            RotaryControl {
+                label: "Target temperature"; unit: "°C";
+                value: root.setpoint; minimum: 20; maximum: 65; step: 0.5; decimals: 1;
+                request-only: true; palette: root.warm-palette;
+                value-changed(v) => { root.setpoint-requested(v); }
+            }
+        }
+        HorizontalLayout {
+            spacing: 12px;
+            LiveTrend {
+                title: "Batch temperature"; unit: "°C";
+                series: [{ label: "Vessel", color: HmiTheme.palette.accent, samples: root.trends[0].samples }]; minimum: 20; maximum: 70;
+                has-data: root.trends.length > 0 && root.trends[0].samples.length > 0;
+                time-minimum: 0; time-maximum: 60;
+                time-start-label: "Batch start"; time-end-label: "+60 s";
+                show-threshold: true; threshold: 60; threshold-label: "Warning · 60 °C";
+            }
+            AlarmPanel {
+                alarms: root.alarms; filter <=> root.alarm-filter;
+                filter-changed(f) => { root.filter-requested(f); }
+                acknowledge-requested(id) => { root.acknowledge-requested(id); }
+            }
+        }
+        Text { height: 20px; text: root.message; color: HmiTheme.palette.muted; font-size: 11px; overflow: elide; }
+    }
+}

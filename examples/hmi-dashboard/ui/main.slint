@@ -1,0 +1,164 @@
+import { ScrollView } from "std-widgets.slint";
+import { HmiTheme, HmiMath, RadialGauge, RotaryControl, StatusLamp, EquipmentState, AlarmPanel, Alarm, AlarmFilter, LiveTrend, TrendSeries } from "@slint-hmi/hmi.slint";
+import { HmiAction } from "@slint-hmi/hmi.slint";
+import { MetricCard, SectionHeading, ProcessLoop } from "dashboard-parts.slint";
+export { HmiTheme }
+
+export component HmiDashboard inherits Window {
+    title: "slint-hmi · Process station";
+    preferred-width: 1440px; preferred-height: 960px;
+    min-width: 1100px; min-height: 720px;
+    background: HmiTheme.palette.canvas;
+    in property <float> temperature: 68;
+    in property <float> pressure: 62;
+    in property <float> flow: 120;
+    in property <float> tank-level: 68;
+    in property <float> cooling-duty: 48;
+    in property <float> energy: 0.16;
+    in property <int> unacknowledged: 0;
+    in property <string> elapsed: "00:02:00";
+    in-out property <float> setpoint: 65;
+    in-out property <float> pump-speed: 75;
+    in-out property <int> preset: 1;
+    in-out property <bool> paused: false;
+    in-out property <bool> fault: false;
+    in-out property <bool> connected: true;
+    in property <float> time-minimum: 0;
+    in property <float> time-maximum: 120;
+    in property <[TrendSeries]> trends;
+    in property <[Alarm]> alarms;
+    in-out property <AlarmFilter> alarm-filter: AlarmFilter.all;
+    in property <string> status: "Simulation running · 1 Hz telemetry";
+    private property <int> section: 0;
+    callback filter-requested(AlarmFilter);
+    callback acknowledge-requested(string);
+    callback fault-changed(bool);
+    callback setpoint-changed(float);
+    callback pump-speed-changed(float);
+    callback preset-requested(int);
+
+    HorizontalLayout {
+        spacing: 0px;
+        Rectangle {
+            width: 176px; background: HmiTheme.dark ? #102536 : #123a46;
+            VerticalLayout {
+                padding: 16px; spacing: 12px;
+                Text { height: 18px; text: "SLINT HMI / INDUSTRIAL"; color: #8cd9d9; font-size: 10px; font-weight: 700; }
+                Text { height: 60px; text: "Process\nstation"; color: white; font-size: 24px; font-weight: 700; }
+                Text { height: 24px; text: "COOLING LOOP · 01"; color: #afc6ce; font-size: 9px; }
+                HmiAction { text: "01   Overview"; selected: root.section == 0; clicked => { root.section = 0; body.content-y = 0px; } }
+                HmiAction { text: "02   Controls"; selected: root.section == 1; clicked => { root.section = 1; body.content-y = -min(controls.y, max(0px, body.content-height - body.visible-height)); } }
+                HmiAction { text: "03   Trends"; selected: root.section == 2; clicked => { root.section = 2; body.content-y = -min(trends-section.y, max(0px, body.content-height - body.visible-height)); } }
+                HmiAction { text: "04   Alarms"; selected: root.section == 3; clicked => { root.section = 3; body.content-y = -min(alarms-section.y, max(0px, body.content-height - body.visible-height)); } }
+                Rectangle { vertical-stretch: 1; }
+                Text { height: 18px; text: "OPERATOR WORKSPACE"; color: #8cd9d9; font-size: 9px; font-weight: 700; }
+                Text { height: 36px; text: "Local simulation\nSample interval 1 second"; color: #afc6ce; font-size: 10px; }
+                HmiAction { text: HmiTheme.dark ? "Light theme" : "Dark theme"; clicked => { HmiTheme.dark = !HmiTheme.dark; } }
+            }
+        }
+        VerticalLayout {
+            spacing: 0px;
+            Rectangle {
+                height: 88px; background: HmiTheme.palette.surface;
+                HorizontalLayout {
+                    padding: 22px; spacing: 12px;
+                    VerticalLayout {
+                        spacing: 4px;
+                        Text { text: "PLANT OPERATIONS  /  CIRCUIT A"; color: HmiTheme.palette.muted; font-size: 10px; }
+                        Text { text: "Cooling loop overview"; color: HmiTheme.palette.text; font-size: 26px; font-weight: 700; }
+                    }
+                    HmiAction { width: 90px; text: root.paused ? "Resume" : "Pause"; selected: root.paused; clicked => { root.paused = !root.paused; } }
+                    HmiAction { width: 106px; text: root.connected ? "Disconnect" : "Reconnect"; clicked => { root.connected = !root.connected; } }
+                    HmiAction { width: 104px; text: root.fault ? "Clear fault" : "Inject fault"; selected: root.fault; clicked => { root.fault = !root.fault; root.fault-changed(root.fault); } }
+                }
+            }
+            body := ScrollView {
+                horizontal-scrollbar-policy: always-off;
+                content-width: self.visible-width;
+                VerticalLayout {
+                    padding: 22px; padding-right: 38px; spacing: 18px;
+                    HorizontalLayout {
+                        height: 106px; spacing: 12px;
+                        MetricCard { label: "TEMPERATURE ERROR"; reading: root.connected ? HmiMath.reading(root.temperature - root.setpoint, 1) + " °C" : "—"; detail: "Supply minus target"; }
+                        MetricCard { label: "COOLING DEMAND"; reading: root.connected ? HmiMath.reading(root.cooling-duty, 0) + " %" : "—"; detail: "Simulated controller output"; tint: HmiTheme.palette.success; }
+                        MetricCard { label: "ENERGY USED"; reading: HmiMath.reading(root.energy, 3) + " kWh"; detail: "Accumulated pump energy"; }
+                        MetricCard { label: "UNACKNOWLEDGED"; reading: root.unacknowledged; detail: root.unacknowledged == 0 ? "All events reviewed" : "Review the alarm console"; tint: root.unacknowledged > 0 ? HmiTheme.palette.warning : HmiTheme.palette.success; }
+                    }
+                    controls := VerticalLayout {
+                        spacing: 12px;
+                        SectionHeading { title: "Process & operator controls"; detail: "Click ring to set · turn or drag to adjust"; }
+                        HorizontalLayout {
+                            height: 310px; spacing: 12px;
+                            ProcessLoop { horizontal-stretch: 2; temperature: HmiMath.reading(root.temperature, 1); flow: HmiMath.reading(root.flow, 0); level: HmiMath.reading(root.tank-level, 0); connected: root.connected; fault: root.fault; paused: root.paused; }
+                            RotaryControl { label: "Temperature target"; unit: "°C"; value <=> root.setpoint; minimum: 30; maximum: 90; step: 0.5; decimals: 1; enabled: root.connected; read-only: root.fault; value-changed(v) => { root.preset = -1; root.setpoint-changed(v); } }
+                            RotaryControl { label: "Pump speed"; unit: "%"; value <=> root.pump-speed; minimum: 30; maximum: 100; step: 1; enabled: root.connected; read-only: root.fault; accent: HmiTheme.palette.success; value-changed(v) => { root.preset = -1; root.pump-speed-changed(v); } }
+                        }
+                        HorizontalLayout {
+                            height: 44px; spacing: 8px;
+                            Text { text: "Operating preset"; color: HmiTheme.palette.muted; font-size: 11px; vertical-alignment: center; }
+                            HmiAction { width: 100px; text: "Eco"; selected: root.preset == 0; enabled: root.connected && !root.fault; clicked => { root.preset-requested(0); } }
+                            HmiAction { width: 100px; text: "Balanced"; selected: root.preset == 1; enabled: root.connected && !root.fault; clicked => { root.preset-requested(1); } }
+                            HmiAction { width: 100px; text: "Boost"; selected: root.preset == 2; enabled: root.connected && !root.fault; clicked => { root.preset-requested(2); } }
+                            Text { text: root.fault ? "Interlock active · controls locked" : "Applied to the live simulation"; color: root.fault ? HmiTheme.palette.critical : HmiTheme.palette.muted; font-size: 10px; horizontal-alignment: right; vertical-alignment: center; overflow: elide; }
+                        }
+                    }
+                    VerticalLayout {
+                        spacing: 12px;
+                        SectionHeading { title: "Instrument readings"; detail: "Live telemetry / engineering units"; }
+                        HorizontalLayout {
+                            height: 244px; spacing: 12px;
+                            RadialGauge { label: "Supply temperature / TT-01"; unit: "°C"; value: root.temperature; maximum: 120; warning-value: 85; critical-value: 100; available: root.connected; }
+                            RadialGauge { label: "Circuit pressure / PT-02"; unit: "bar"; value: root.pressure; maximum: 100; warning-value: 80; critical-value: 92; available: root.connected; accent: HmiTheme.palette.success; }
+                            RadialGauge { label: "Return flow / FT-03"; unit: "L/min"; value: root.flow; maximum: 200; warning-value: 165; critical-value: 190; available: root.connected; decimals: 0; }
+                            RadialGauge { label: "Reservoir level / LT-04"; unit: "%"; value: root.tank-level; warning-value: 85; critical-value: 95; available: root.connected; decimals: 0; }
+                        }
+                    }
+                    trends-section := VerticalLayout {
+                        spacing: 12px;
+                        SectionHeading { title: "Performance trends"; detail: "Rolling 120 seconds · inspect with the cursor"; }
+                        HorizontalLayout {
+                            height: 300px; spacing: 12px;
+                            LiveTrend {
+                                title: "Thermal response"; unit: "°C";
+                                series: [{ label: "Supply", color: HmiTheme.palette.accent, samples: root.trends[0].samples }, { label: "Target", color: HmiTheme.dark ? #dfaeff : #8057b3, samples: root.trends[1].samples }];
+                                has-data: root.trends.length > 0 && root.trends[0].samples.length > 0;
+                                minimum: 20; maximum: 110; time-minimum: root.time-minimum; time-maximum: root.time-maximum;
+                                show-threshold: true; threshold: 85; threshold-label: "Warning · 85 °C"; available: root.connected;
+                            }
+                            LiveTrend {
+                                title: "Hydraulic pressure"; unit: "bar";
+                                series: [{ label: "PT-02", color: HmiTheme.palette.success, samples: root.trends[2].samples }];
+                                has-data: root.trends.length > 2 && root.trends[2].samples.length > 0;
+                                minimum: 30; maximum: 100; time-minimum: root.time-minimum; time-maximum: root.time-maximum;
+                                show-threshold: true; threshold: 80; threshold-label: "Warning · 80 bar"; available: root.connected;
+                            }
+                        }
+                    }
+                    alarms-section := VerticalLayout {
+                        spacing: 12px;
+                        SectionHeading { title: "Equipment & events"; detail: "Acknowledging does not clear an active condition"; }
+                        HorizontalLayout {
+                            height: 330px; spacing: 12px;
+                            AlarmPanel { horizontal-stretch: 2; alarms: root.alarms; filter <=> root.alarm-filter; filter-changed(f) => { root.filter-requested(f); } acknowledge-requested(id) => { root.acknowledge-requested(id); } }
+                            VerticalLayout {
+                                min-width: 250px; spacing: 8px;
+                                StatusLamp { label: "Primary pump"; state: !root.connected ? EquipmentState.offline : root.fault ? EquipmentState.fault : root.paused ? EquipmentState.idle : EquipmentState.running; blink: root.fault; }
+                                StatusLamp { label: "Pressure circuit"; state: !root.connected ? EquipmentState.offline : root.pressure >= 80 ? EquipmentState.warning : EquipmentState.running; }
+                                StatusLamp { label: "Safety interlock"; state: !root.connected ? EquipmentState.offline : root.fault ? EquipmentState.fault : EquipmentState.running; state-text: !root.connected ? "Unknown" : root.fault ? "Tripped" : "Healthy"; }
+                                StatusLamp { label: "Controller / PLC-01"; state: root.connected ? EquipmentState.running : EquipmentState.offline; state-text: root.connected ? "Online · " + root.elapsed : "Telemetry unavailable"; }
+                            }
+                        }
+                    }
+                }
+            }
+            Rectangle {
+                height: 34px; background: HmiTheme.palette.surface;
+                HorizontalLayout {
+                    padding-left: 22px; padding-right: 22px;
+                    Text { text: root.status; color: HmiTheme.palette.muted; font-size: 10px; vertical-alignment: center; overflow: elide; }
+                    Text { text: "SIMULATED EQUIPMENT  ·  " + root.elapsed; color: HmiTheme.palette.muted; font-size: 10px; horizontal-alignment: right; vertical-alignment: center; }
+                }
+            }
+        }
+    }
+}

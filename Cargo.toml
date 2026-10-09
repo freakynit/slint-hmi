@@ -1,0 +1,14 @@
+[workspace]
+members = ["examples/hmi-dashboard", "examples/hmi-compact"]
+resolver = "3"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.92"
+publish = false
+license = "MIT"
+
+[workspace.dependencies]
+slint = "=1.18.1"
+slint-build = "=1.18.1"

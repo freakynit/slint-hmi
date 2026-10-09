@@ -1,0 +1,39 @@
+export struct HmiPalette {
+    canvas: color,
+    surface: color,
+    elevated: color,
+    border: color,
+    text: color,
+    muted: color,
+    accent: color,
+    success: color,
+    warning: color,
+    critical: color,
+    track: color,
+}
+
+export global HmiTheme {
+    in-out property <bool> dark: false;
+    in-out property <bool> reduced-motion: false;
+    out property <HmiPalette> palette: dark ? {
+        canvas: #0b121c, surface: #131e2c, elevated: #1b2a3b,
+        border: #2b3d51, text: #edf4fc, muted: #a5b6ca,
+        accent: #56d9ea, success: #6be3b0, warning: #ffc56b,
+        critical: #ff8795, track: #293b4e,
+    } : {
+        canvas: #edf2f7, surface: #ffffff, elevated: #f1f5f9,
+        border: #cdd8e4, text: #14283d, muted: #52677c,
+        accent: #007c91, success: #14724e, warning: #956000,
+        critical: #bf3046, track: #dfe8f0,
+    };
+}
+
+// Shared range and formatting rules. Invalid ranges produce a safe zero fraction.
+export global HmiMath {
+    public pure function fraction(value: float, minimum: float, maximum: float) -> float {
+        maximum > minimum ? clamp((value - minimum) / (maximum - minimum), 0, 1) : 0
+    }
+    public pure function reading(value: float, decimals: int) -> string {
+        round(value * pow(10, clamp(decimals, 0, 3))) / pow(10, clamp(decimals, 0, 3))
+    }
+}

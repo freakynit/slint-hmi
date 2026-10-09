@@ -1,0 +1,83 @@
+import { HmiPalette, HmiTheme, HmiMath } from "theme.slint";
+import { DialArc } from "primitives.slint";
+
+export component RadialGauge inherits Rectangle {
+    in property <HmiPalette> palette: HmiTheme.palette;
+    in property <string> label: "Process value";
+    in property <string> unit;
+    in property <float> value: 0;
+    in property <float> minimum: 0;
+    in property <float> maximum: 100;
+    in property <int> decimals: 1;
+    in property <int> tick-count: 11;
+    in property <bool> available: true;
+    in property <bool> show-bands: true;
+    in property <float> warning-value: minimum + (maximum - minimum) * 0.75;
+    in property <float> critical-value: minimum + (maximum - minimum) * 0.9;
+    in property <color> accent: palette.accent;
+    out property <bool> range-valid: maximum > minimum;
+    out property <float> fraction: HmiMath.fraction(value, minimum, maximum);
+    private property <bool> usable: root.available && root.range-valid;
+    private property <float> warning-limit: clamp(root.warning-value, root.minimum, max(root.minimum, root.maximum));
+    private property <float> critical-limit: clamp(max(root.warning-value, root.critical-value), root.minimum, max(root.minimum, root.maximum));
+    private property <color> reading-color: !root.usable ? root.palette.muted : root.show-bands && root.value >= root.critical-limit ? root.palette.critical : root.show-bands && root.value >= root.warning-limit ? root.palette.warning : root.accent;
+    min-width: 160px;
+    min-height: 190px;
+    preferred-width: 240px;
+    preferred-height: 260px;
+    background: root.palette.surface;
+    border-radius: 14px;
+    border-width: 1px;
+    border-color: root.palette.border;
+    accessible-role: groupbox;
+    accessible-label: root.label + ": " + (root.usable ? HmiMath.reading(root.value, root.decimals) + " " + root.unit : "Unavailable");
+
+    VerticalLayout {
+        padding: 16px;
+        spacing: 4px;
+        Text { text: root.label; color: root.palette.muted; font-size: 13px; font-weight: 600; height: 20px; overflow: elide; }
+        Rectangle {
+            dial := Rectangle {
+                width: min(parent.width, parent.height);
+                height: self.width;
+                x: (parent.width - self.width) / 2;
+                y: (parent.height - self.height) / 2;
+                DialArc { tint: root.palette.track; thickness: dial.width / 18; }
+                if root.show-bands && root.range-valid: DialArc {
+                    start: HmiMath.fraction(root.warning-limit, root.minimum, root.maximum);
+                    end: HmiMath.fraction(root.critical-limit, root.minimum, root.maximum);
+                    tint: root.palette.warning;
+                    thickness: dial.width / 45;
+                }
+                if root.show-bands && root.range-valid: DialArc {
+                    start: HmiMath.fraction(root.critical-limit, root.minimum, root.maximum);
+                    tint: root.palette.critical;
+                    thickness: dial.width / 45;
+                }
+                if root.usable: DialArc { end: root.fraction; tint: root.reading-color; thickness: dial.width / 25; }
+                for tick in clamp(root.tick-count, 2, 41): Rectangle {
+                    private property <angle> angle: 135deg + tick * 270deg / (clamp(root.tick-count, 2, 41) - 1);
+                    width: 3px; height: 3px; border-radius: 1.5px;
+                    x: dial.width * (0.5 + 0.47 * cos(self.angle)) - self.width / 2;
+                    y: dial.height * (0.5 + 0.47 * sin(self.angle)) - self.height / 2;
+                    background: root.palette.muted;
+                }
+                Text {
+                    y: parent.height * 0.35; height: parent.height * 0.23;
+                    text: root.usable ? HmiMath.reading(root.value, root.decimals) : "—";
+                    font-size: clamp(dial.width * 0.19, 22px, 42px);
+                    font-weight: 700; color: root.reading-color;
+                    horizontal-alignment: center; vertical-alignment: center;
+                }
+                Text { y: parent.height * 0.58; height: 22px; text: root.unit; color: root.palette.muted; font-size: 12px; horizontal-alignment: center; }
+                Text { x: 6px; y: parent.height * 0.87; height: 20px; width: parent.width / 2 - 6px; text: HmiMath.reading(root.minimum, root.decimals); color: root.palette.muted; font-size: 11px; }
+                Text { x: parent.width / 2; y: parent.height * 0.87; height: 20px; width: parent.width / 2 - 6px; text: HmiMath.reading(root.maximum, root.decimals); color: root.palette.muted; font-size: 11px; horizontal-alignment: right; }
+            }
+        }
+        Text {
+            height: 18px;
+            text: !root.range-valid ? "Invalid range" : !root.available ? "No signal" : root.value < root.minimum || root.value > root.maximum ? "Out of range" : root.show-bands && root.value >= root.critical-limit ? "Critical" : root.show-bands && root.value >= root.warning-limit ? "Warning" : "Normal";
+            color: root.reading-color; font-size: 11px; horizontal-alignment: center;
+        }
+    }
+}

@@ -1,0 +1,88 @@
+import { ListView } from "std-widgets.slint";
+import { HmiPalette, HmiTheme } from "theme.slint";
+import { HmiAction } from "primitives.slint";
+
+export enum AlarmSeverity { info, warning, critical }
+export enum AlarmFilter { all, unacknowledged, warning, critical }
+export struct Alarm {
+    id: string,
+    title: string,
+    source: string,
+    timestamp: string,
+    severity: AlarmSeverity,
+    acknowledged: bool,
+    active: bool,
+}
+
+export component AlarmPanel inherits Rectangle {
+    in property <HmiPalette> palette: HmiTheme.palette;
+    in property <string> title: "Alarm console";
+    // This is the visible model. The host applies filter requests to its store.
+    in property <[Alarm]> alarms;
+    in-out property <AlarmFilter> filter: AlarmFilter.all;
+    in property <bool> show-filters: true;
+    in property <bool> acknowledgement-enabled: true;
+    in property <string> empty-text: "No matching alarms";
+    in property <length> row-height: 88px;
+    in property <length> scrollbar-gutter: 24px;
+    callback filter-changed(AlarmFilter);
+    callback acknowledge-requested(string);
+    min-width: 340px; min-height: 210px;
+    preferred-width: 520px; preferred-height: 330px;
+    background: root.palette.surface;
+    border-width: 1px; border-color: root.palette.border; border-radius: 14px;
+    accessible-role: groupbox; accessible-label: root.title;
+    function select-filter(next: AlarmFilter) {
+        root.filter = next;
+        root.filter-changed(next);
+    }
+    VerticalLayout {
+        padding: 16px; spacing: 12px;
+        HorizontalLayout {
+            height: 22px;
+            Text { text: root.title; font-size: 14px; font-weight: 600; color: root.palette.text; overflow: elide; }
+            Text { text: root.alarms.length + " shown"; font-size: 11px; color: root.palette.muted; horizontal-alignment: right; }
+        }
+        if root.show-filters: HorizontalLayout {
+            height: 44px; spacing: 6px;
+            HmiAction { text: "All"; palette: root.palette; selected: root.filter == AlarmFilter.all; clicked => { root.select-filter(AlarmFilter.all); } }
+            HmiAction { text: "New"; palette: root.palette; selected: root.filter == AlarmFilter.unacknowledged; clicked => { root.select-filter(AlarmFilter.unacknowledged); } }
+            HmiAction { text: "Warning"; palette: root.palette; selected: root.filter == AlarmFilter.warning; clicked => { root.select-filter(AlarmFilter.warning); } }
+            HmiAction { text: "Critical"; palette: root.palette; selected: root.filter == AlarmFilter.critical; clicked => { root.select-filter(AlarmFilter.critical); } }
+        }
+        Rectangle {
+            if root.alarms.length == 0: VerticalLayout {
+                alignment: center; spacing: 6px;
+                Text { text: root.empty-text; color: root.palette.text; font-size: 14px; horizontal-alignment: center; }
+                Text { text: "Current filter · " + (root.filter == AlarmFilter.all ? "All" : root.filter == AlarmFilter.unacknowledged ? "Unacknowledged" : root.filter == AlarmFilter.warning ? "Warning" : "Critical"); color: root.palette.muted; font-size: 11px; horizontal-alignment: center; }
+            }
+            if root.alarms.length > 0: ListView {
+                horizontal-scrollbar-policy: always-off;
+                for alarm in root.alarms: alarm-row := Rectangle {
+                    private property <color> severity-color: alarm.severity == AlarmSeverity.critical ? root.palette.critical : alarm.severity == AlarmSeverity.warning ? root.palette.warning : root.palette.accent;
+                    height: max(80px, root.row-height);
+                    background: root.palette.surface;
+                    accessible-role: list-item;
+                    accessible-label: alarm.title + ", " + alarm.source + ", " + (alarm.active ? "Active" : "Cleared") + ", " + (alarm.acknowledged ? "Acknowledged" : "Unacknowledged");
+                    Rectangle { width: 3px; y: 12px; height: parent.height - 24px; background: parent.severity-color; border-radius: 1.5px; }
+                    HorizontalLayout {
+                        padding-left: 14px; padding-right: max(20px, root.scrollbar-gutter);
+                        padding-top: 10px; padding-bottom: 10px; spacing: 12px;
+                        VerticalLayout {
+                            spacing: 4px; alignment: center;
+                            Text { text: alarm.title; color: root.palette.text; font-size: 13px; font-weight: 600; overflow: elide; }
+                            Text { text: alarm.source + " · " + alarm.timestamp; color: root.palette.muted; font-size: 11px; overflow: elide; }
+                            Text { text: (alarm.severity == AlarmSeverity.critical ? "CRITICAL" : alarm.severity == AlarmSeverity.warning ? "WARNING" : "INFO") + " · " + (alarm.active ? "Active" : "Cleared"); color: alarm-row.severity-color; font-size: 10px; overflow: elide; }
+                        }
+                        HmiAction {
+                            width: 74px; height: 44px; text: alarm.acknowledged ? "Ack’d" : "Ack";
+                            palette: root.palette; enabled: root.acknowledgement-enabled && !alarm.acknowledged;
+                            clicked => { root.acknowledge-requested(alarm.id); }
+                        }
+                    }
+                    Rectangle { y: parent.height - 1px; height: 1px; background: root.palette.border; }
+                }
+            }
+        }
+    }
+}

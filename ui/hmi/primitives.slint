@@ -1,0 +1,72 @@
+import { HmiPalette, HmiTheme } from "theme.slint";
+
+// Coordinates are fixed to a square viewbox so changing the arc's endpoints
+// never changes the path's automatic bounding box or its scale.
+export component DialArc inherits Path {
+    in property <float> start: 0;
+    in property <float> end: 1;
+    in property <color> tint: HmiTheme.palette.accent;
+    in property <length> thickness: 5px;
+    private property <angle> a: 135deg + clamp(root.start, 0, 1) * 270deg;
+    private property <angle> b: 135deg + clamp(root.end, 0, 1) * 270deg;
+    viewbox-width: 100;
+    viewbox-height: 100;
+    stroke: root.tint;
+    stroke-width: root.thickness;
+    stroke-line-cap: round;
+    visible: root.end > root.start;
+    MoveTo { x: 50 + 39 * cos(root.a); y: 50 + 39 * sin(root.a); }
+    ArcTo {
+        radius-x: 39; radius-y: 39;
+        x: 50 + 39 * cos(root.b); y: 50 + 39 * sin(root.b);
+        large-arc: root.b - root.a > 180deg;
+        sweep: true;
+    }
+}
+
+export component HmiAction inherits Rectangle {
+    in property <string> text;
+    in property <bool> enabled: true;
+    in property <bool> selected: false;
+    in property <HmiPalette> palette: HmiTheme.palette;
+    callback clicked;
+    min-width: 44px;
+    min-height: 44px;
+    preferred-width: caption.preferred-width + 28px;
+    preferred-height: 44px;
+    border-radius: 8px;
+    border-width: 1px;
+    border-color: focus.has-focus || root.selected ? root.palette.accent : root.palette.border;
+    background: touch.pressed ? root.palette.track : root.selected || touch.has-hover ? root.palette.elevated : root.palette.surface;
+    opacity: root.enabled ? 1 : 0.45;
+    forward-focus: focus;
+    accessible-role: button;
+    accessible-label: root.text;
+    accessible-enabled: root.enabled;
+    accessible-action-default => { if root.enabled { root.clicked(); } }
+    caption := Text {
+        text: root.text;
+        color: root.selected ? root.palette.accent : root.palette.text;
+        font-size: 13px;
+        font-weight: 600;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+        overflow: elide;
+    }
+    focus := FocusScope {
+        x: 0px; y: 0px; width: 0px; height: 0px;
+        enabled: root.enabled;
+        key-pressed(event) => {
+            if event.text == Key.Return || event.text == " " {
+                root.clicked();
+                return accept;
+            }
+            reject
+        }
+    }
+    touch := TouchArea {
+        enabled: root.enabled;
+        mouse-cursor: pointer;
+        clicked => { focus.focus(); root.clicked(); }
+    }
+}

@@ -1,0 +1,49 @@
+import { HmiPalette, HmiTheme } from "theme.slint";
+
+export enum EquipmentState { offline, idle, running, warning, fault }
+
+export component StatusLamp inherits Rectangle {
+    in property <HmiPalette> palette: HmiTheme.palette;
+    in property <string> label: "Equipment";
+    in property <EquipmentState> state: EquipmentState.idle;
+    // Nonempty text overrides the default state caption, never the label.
+    in property <string> state-text;
+    in property <color> lamp-color: state == EquipmentState.running ? palette.success : state == EquipmentState.warning ? palette.warning : state == EquipmentState.fault ? palette.critical : palette.muted;
+    in property <bool> blink: false;
+    in property <duration> blink-interval: 600ms;
+    in property <bool> reduced-motion: HmiTheme.reduced-motion;
+    in property <length> lamp-size: 14px;
+    out property <string> caption: state-text != "" ? state-text : state == EquipmentState.offline ? "Offline" : state == EquipmentState.idle ? "Idle" : state == EquipmentState.running ? "Running" : state == EquipmentState.warning ? "Warning" : "Fault";
+    private property <bool> phase: true;
+    private property <bool> blinking: root.blink && !root.reduced-motion && root.state != EquipmentState.offline;
+    min-width: 150px; min-height: 64px;
+    preferred-width: 220px; preferred-height: 72px;
+    background: root.palette.surface;
+    border-width: 1px; border-color: root.palette.border; border-radius: 12px;
+    accessible-role: groupbox;
+    accessible-label: root.label + ": " + root.caption;
+    Timer { running: root.blinking; interval: max(100ms, root.blink-interval); triggered => { root.phase = !root.phase; } }
+    HorizontalLayout {
+        padding: 14px; spacing: 12px;
+        Rectangle {
+            width: clamp(root.lamp-size, 8px, 32px) + 12px;
+            Rectangle {
+                width: parent.width; height: self.width; y: (parent.height - self.height) / 2;
+                background: root.lamp-color.with-alpha(0.12); border-radius: self.width / 2;
+            }
+            Rectangle {
+                width: parent.width - 12px; height: self.width;
+                x: 6px; y: (parent.height - self.height) / 2;
+                border-radius: self.width / 2;
+                background: root.state == EquipmentState.offline ? root.palette.track : root.lamp-color;
+                border-width: 1px; border-color: root.lamp-color;
+                opacity: root.blinking && !root.phase ? 0.25 : 1;
+            }
+        }
+        VerticalLayout {
+            alignment: center; spacing: 3px;
+            Text { text: root.label; color: root.palette.text; font-size: 13px; font-weight: 600; overflow: elide; }
+            Text { text: root.caption; color: root.lamp-color; font-size: 11px; overflow: elide; }
+        }
+    }
+}

@@ -1,0 +1,148 @@
+import { HmiPalette, HmiTheme, HmiMath } from "theme.slint";
+import { DialArc, HmiAction } from "primitives.slint";
+
+export component RotaryControl inherits Rectangle {
+    in property <HmiPalette> palette: HmiTheme.palette;
+    in property <string> label: "Setpoint";
+    in property <string> unit;
+    in-out property <float> value: 50;
+    in property <float> minimum: 0;
+    in property <float> maximum: 100;
+    in property <float> step: 1;
+    in property <int> decimals: 0;
+    in property <bool> enabled: true;
+    in property <bool> read-only: false;
+    // In request-only mode, the host accepts a proposal by updating value itself.
+    in property <bool> request-only: false;
+    in property <length> drag-distance: 180px;
+    in property <bool> ring-input: true;
+    in property <color> accent: palette.accent;
+    callback value-changed(float);
+    out property <bool> range-valid: maximum > minimum;
+    out property <bool> has-focus: focus.has-focus;
+    private property <bool> interactive: root.enabled && !root.read-only && root.range-valid;
+    private property <float> increment: root.step > 0 ? root.step : 1;
+    private property <float> fraction: HmiMath.fraction(root.value, root.minimum, root.maximum);
+    private property <float> drag-start;
+    private property <float> last-proposal;
+    min-width: 180px; min-height: 260px;
+    preferred-width: 240px; preferred-height: 310px;
+    background: root.palette.surface;
+    border-width: 1px;
+    border-color: root.has-focus ? root.accent : root.palette.border;
+    border-radius: 14px;
+    opacity: root.enabled ? 1 : 0.5;
+    forward-focus: focus;
+    accessible-role: slider;
+    accessible-label: root.label + " " + root.unit;
+    accessible-enabled: root.interactive;
+    accessible-value: root.value;
+    accessible-value-minimum: root.minimum;
+    accessible-value-maximum: max(root.minimum, root.maximum);
+    accessible-value-step: root.increment;
+    accessible-action-set-value(v) => { if v.is-float() { root.propose(v.to-float()); } }
+    accessible-action-increment => { root.propose(root.value + root.increment); }
+    accessible-action-decrement => { root.propose(root.value - root.increment); }
+
+    function propose(candidate: float) {
+        if root.interactive {
+            // Preserve exact endpoints even when the range isn't divisible by step.
+            root.last-proposal = candidate <= root.minimum ? root.minimum : candidate >= root.maximum ? root.maximum : clamp(root.minimum + round((candidate - root.minimum) / root.increment) * root.increment, root.minimum, root.maximum);
+            if root.last-proposal != root.value {
+                if !root.request-only { root.value = root.last-proposal; }
+                root.value-changed(root.last-proposal);
+            }
+        }
+    }
+    function turn-ring(x: length, y: length) {
+        let offset = mod(atan2(y / 1px, x / 1px) - 135deg, 360deg);
+        // The bottom 90-degree gap maps to its nearest endpoint.
+        let position = offset <= 270deg ? offset / 270deg : offset < 315deg ? 1 : 0;
+        root.propose(root.minimum + position * (root.maximum - root.minimum));
+    }
+    focus := FocusScope {
+        x: 0px; y: 0px; width: 0px; height: 0px;
+        enabled: root.interactive;
+        key-pressed(event) => {
+            if event.text == Key.UpArrow || event.text == Key.RightArrow {
+                root.propose(root.value + root.increment * (event.modifiers.shift ? 10 : 1)); return accept;
+            }
+            if event.text == Key.DownArrow || event.text == Key.LeftArrow {
+                root.propose(root.value - root.increment * (event.modifiers.shift ? 10 : 1)); return accept;
+            }
+            if event.text == Key.Home { root.propose(root.minimum); return accept; }
+            if event.text == Key.End { root.propose(root.maximum); return accept; }
+            reject
+        }
+    }
+    VerticalLayout {
+        padding: 16px; spacing: 8px;
+        Text { height: 20px; text: root.label; color: root.palette.muted; font-size: 13px; font-weight: 600; overflow: elide; }
+        Rectangle {
+            dial := Rectangle {
+                width: min(parent.width, parent.height); height: self.width;
+                x: (parent.width - self.width) / 2; y: (parent.height - self.height) / 2;
+                DialArc { tint: root.palette.track; thickness: dial.width / 30; }
+                DialArc { end: root.fraction; tint: root.accent; thickness: dial.width / 30; }
+                for tick in 11: Rectangle {
+                    private property <angle> angle: 135deg + tick * 27deg;
+                    x: parent.width * (0.5 + 0.46 * cos(self.angle)) - 1.5px;
+                    y: parent.height * (0.5 + 0.46 * sin(self.angle)) - 1.5px;
+                    width: 3px; height: 3px; border-radius: 1.5px;
+                    background: root.palette.muted;
+                }
+                Rectangle {
+                    x: parent.width * 0.2; y: parent.height * 0.2;
+                    width: parent.width * 0.6; height: self.width;
+                    background: root.palette.elevated; border-radius: self.width / 2;
+                    border-width: 1px; border-color: root.has-focus || touch.has-hover ? root.accent : root.palette.border;
+                }
+                Rectangle {
+                    private property <angle> angle: 135deg + root.fraction * 270deg;
+                    width: 8px; height: 8px; border-radius: 4px;
+                    x: parent.width * (0.5 + 0.24 * cos(self.angle)) - 4px;
+                    y: parent.height * (0.5 + 0.24 * sin(self.angle)) - 4px;
+                    background: root.accent;
+                }
+                Text { y: parent.height * 0.37; height: parent.height * 0.23; text: HmiMath.reading(root.value, root.decimals); font-size: clamp(parent.width * 0.17, 22px, 34px); font-weight: 700; color: root.palette.text; horizontal-alignment: center; vertical-alignment: center; }
+                Text { y: parent.height * 0.61; height: 20px; text: root.unit; font-size: 11px; color: root.palette.muted; horizontal-alignment: center; }
+                touch := TouchArea {
+                    private property <bool> turning-ring;
+                    enabled: root.interactive;
+                    mouse-cursor: root.ring-input ? pointer : ns-resize;
+                    pointer-event(event) => {
+                        if event.kind == PointerEventKind.down && event.button == PointerEventButton.left {
+                            focus.focus(); root.drag-start = clamp(root.value, root.minimum, root.maximum);
+                            let dx = (self.mouse-x - self.width / 2) / 1px;
+                            let dy = (self.mouse-y - self.height / 2) / 1px;
+                            self.turning-ring = root.ring-input && sqrt(dx * dx + dy * dy) >= self.width / 1px * 0.30;
+                            if self.turning-ring { root.turn-ring(self.mouse-x - self.width / 2, self.mouse-y - self.height / 2); }
+                        }
+                    }
+                    moved => {
+                        if self.pressed {
+                            if self.turning-ring {
+                                root.turn-ring(self.mouse-x - self.width / 2, self.mouse-y - self.height / 2);
+                            } else {
+                                root.propose(root.drag-start + (self.pressed-y - self.mouse-y) / max(1px, root.drag-distance) * (root.maximum - root.minimum));
+                            }
+                        }
+                    }
+                    scroll-event(event) => {
+                        if event.delta-y == 0px { return reject; }
+                        focus.focus();
+                        root.propose(root.value + (event.delta-y > 0px ? root.increment : -root.increment));
+                        accept
+                    }
+                }
+            }
+        }
+        HorizontalLayout {
+            height: 44px; spacing: 8px;
+            HmiAction { width: 44px; text: "−"; palette: root.palette; enabled: root.interactive && root.value > root.minimum; clicked => { root.propose(root.value - root.increment); } }
+            Text { text: !root.range-valid ? "Invalid range" : root.read-only ? "Read only" : root.request-only ? "Host controlled" : "Step " + HmiMath.reading(root.increment, 3); color: root.palette.muted; font-size: 11px; horizontal-alignment: center; vertical-alignment: center; }
+            HmiAction { width: 44px; text: "+"; palette: root.palette; enabled: root.interactive && root.value < root.maximum; clicked => { root.propose(root.value + root.increment); } }
+        }
+        Text { height: 14px; text: !root.enabled ? "Disconnected" : root.read-only ? "Control locked" : root.ring-input ? "Turn ring · drag center ↕" : "Drag center ↕ · use arrows"; color: root.palette.muted; font-size: 10px; horizontal-alignment: center; }
+    }
+}
